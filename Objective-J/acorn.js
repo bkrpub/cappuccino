@@ -112,17 +112,60 @@ if (!exports.acorn) {
   // want to find the line/column position for a given character
   // offset. `input` should be the code string that the offset refers
   // into.
-
+  //
+  // gcc -E, when invoked without -P emits source position lines in the form
+  // # <lineNumber> "file or other location" 
+  // this change interprets those marks to recover the exact source line number.
+  // Depends on -P being removed in Objective-J/CFHTTPRequest.js
+  //
+  // The counterparts which are used when the `locations` option is on
+  // (`curLineLoc` / `nextLineStart`) are not yet modified to do so.
   var getLineInfo = exports.getLineInfo = function(input, offset) {
-    for (var line = 1, cur = 0;;) {
-      lineBreak.lastIndex = cur;
-      var match = lineBreak.exec(input);
-      if (match && match.index < offset) {
-        ++line;
-        cur = match.index + match[0].length;
-      } else break;
-    }
-    return {line: line, column: offset - cur, lineStart: cur, lineEnd: (match ? match.index + match[0].length : input.length)};
+
+      var lineMarkPrefix = '//# ',
+          lineMarkPrefixLength = lineMarkPrefix.length,
+          lineMarkOffsetToNumber = lineMarkPrefixLength;
+
+      // initial state, no lineMark found
+      var lastLineMarkLine = -1,
+          lastLineMarkStart = -1,
+          lastLineMarkEnd = -1;
+
+      for (var line = 1, cur = 0;;) {
+          lineBreak.lastIndex = cur;
+
+          if ( (cur < offset - lineMarkPrefixLength) && input.substr(cur, lineMarkPrefixLength) === lineMarkPrefix)
+          {
+              lastLineMarkLine = line;
+              lastLineMarkStart = cur + lineMarkOffsetToNumber;
+              lastLineMarkEnd = 0; // start found, end will be found by next newline match
+          }
+
+          var match = lineBreak.exec(input);
+          if (match && match.index < offset)
+          {
+              ++line;
+              cur = match.index + match[0].length;
+              if (0 == lastLineMarkEnd) // zero is an explicit state here compared to -1
+              {
+                  lastLineMarkEnd = cur - 1;
+              }
+          } else break;
+      }
+
+      if (-1 != lastLineMarkLine)
+      {
+          var lineMark = input.substr(lastLineMarkStart, (lastLineMarkEnd ? lastLineMarkEnd : offset) - lastLineMarkStart),
+              markedLine = parseInt( lineMark, 10 );
+          if (isNaN(markedLine)) // just being defensive
+          {
+              print("WARNING line " + line + " compiler failed to recover source line from # directive at line " + lastLineMarkLine );
+          } else {
+              line = markedLine + (line - lastLineMarkLine - 1); // the line following the lineMark has the marked number
+          }
+      }
+
+      return {line: line, column: offset - cur, lineStart: cur, lineEnd: (match ? match.index + match[0].length : input.length)};
   };
 
   // Acorn is organized as a tokenizer and a recursive-descent parser.

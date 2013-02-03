@@ -306,7 +306,13 @@ function FileRequest(/*CFURL*/ aURL, onsuccess, onfailure)
         var aFilePath = aURL.toString().substring(5),
             OS = require("os"),
             gccFlags = require("objective-j").currentCompilerFlags(),
-            gcc = OS.popen("gcc -E -x c -P " + (gccFlags ? gccFlags : "") + " " + OS.enquote(aFilePath), { charset:"UTF-8" }),
+
+            // Removed -P option to generate source line information (and, sadly, much more whitespace)
+            // by postprocessing the '# line "file"' output into '//# line "file"' it becomes valid JS again.
+            // The case of having a # at start of line which was escaped by a \ at the end of the preceding
+            // line is handled by gcc - it joins the lines.
+            // This information is used in acorn.js `getLineInfo`
+            gcc = OS.popen("gcc -E -x c " + (gccFlags ? gccFlags : "") + " " + OS.enquote(aFilePath) + " | sed 's/^#/\\/\\/#/' ", { charset:"UTF-8" }),
             chunk,
             fileContents = "";
 
