@@ -307,12 +307,14 @@ function FileRequest(/*CFURL*/ aURL, onsuccess, onfailure)
             OS = require("os"),
             gccFlags = require("objective-j").currentCompilerFlags(),
 
-            // Removed -P option to generate source line information (and, sadly, much more whitespace)
-            // by postprocessing the '# line "file"' output into '//# line "file"' it becomes valid JS again.
+            // Removed -P option to generate source line information again.
+            // Postprocessing the '# line "file"' output into '//# line "file"' in the while loop below.
             // The case of having a # at start of line which was escaped by a \ at the end of the preceding
             // line is handled by gcc - it joins the lines.
             // This information is used in acorn.js `getLineInfo`
-            gcc = OS.popen("gcc -E -x c " + (gccFlags ? gccFlags : "") + " " + OS.enquote(aFilePath) + " | sed 's/^#/\\/\\/#/' ", { charset:"UTF-8" }),
+            // The compiler has code to handle '#' but fails on CPURL.j in 'jake test'
+            // for reasons I do not yet understand.
+            gcc = OS.popen("gcc -E -x c " + (gccFlags ? gccFlags : "") + " " + OS.enquote(aFilePath), { charset:"UTF-8" }),
             chunk,
             fileContents = "";
 
@@ -321,6 +323,8 @@ function FileRequest(/*CFURL*/ aURL, onsuccess, onfailure)
 
         if (fileContents.length > 0)
         {
+            // convert cpp # line info to js comments
+            fileContents = fileContents.replace(/^#/mg, "//#");
             request._nativeRequest.responseText = fileContents;
             onsuccess({request: request});
         }
